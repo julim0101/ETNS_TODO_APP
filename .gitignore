@@ -2,3 +2,6 @@ __pycache__/
 *.pyc
 todo.db
 .venv/
+
+.vercel
+.env*
