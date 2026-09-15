@@ -5,3 +5,5 @@ todo.db
 
 .vercel
 .env*
+
+supabase/.temp/

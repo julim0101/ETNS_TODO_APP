@@ -1,4 +1,4 @@
-"""ETNS 할일관리 앱 (Flask + SQLite)."""
+"""ETNS 할일관리 앱 (Flask + SQLite/Supabase Postgres)."""
 
 import os
 import sqlite3
@@ -9,12 +9,20 @@ from flask import Flask, flash, g, redirect, render_template, request, url_for
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# Vercel 등 서버리스 환경은 파일시스템이 읽기 전용이라 /tmp 만 쓸 수 있다.
-# (서버리스에서는 인스턴스가 재활용될 때 데이터가 사라진다. README 참고)
-ON_SERVERLESS = bool(os.environ.get("VERCEL"))
-DB_PATH = os.environ.get("TODO_DB_PATH") or os.path.join(
-    tempfile.gettempdir() if ON_SERVERLESS else BASE_DIR, "todo.db"
-)
+# DATABASE_URL 이 설정돼 있으면 Supabase(Postgres) 를 쓰고,
+# 없으면 로컬 개발 편의를 위해 SQLite 로 동작한다.
+DATABASE_URL = os.environ.get("DATABASE_URL")
+USE_POSTGRES = bool(DATABASE_URL)
+
+if USE_POSTGRES:
+    import psycopg
+    from psycopg.rows import dict_row
+else:
+    # Vercel 등 서버리스 환경은 파일시스템이 읽기 전용이라 /tmp 만 쓸 수 있다.
+    ON_SERVERLESS = bool(os.environ.get("VERCEL"))
+    DB_PATH = os.environ.get("TODO_DB_PATH") or os.path.join(
+        tempfile.gettempdir() if ON_SERVERLESS else BASE_DIR, "todo.db"
+    )
 
 # 배포 환경(Vercel)은 UTC 로 동작하므로 표시/비교는 항상 KST 기준으로 한다.
 KST = timezone(timedelta(hours=9))
@@ -28,10 +36,22 @@ app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "etns-todo-dev-key")
 
 # --- DB ---------------------------------------------------------------------
 
+def q(sql):
+    """SQLite 는 '?', Postgres 는 '%s' 를 파라미터 자리표시자로 쓴다."""
+    return sql.replace("?", "%s") if USE_POSTGRES else sql
+
+
 def get_db():
     if "db" not in g:
-        g.db = sqlite3.connect(DB_PATH)
-        g.db.row_factory = sqlite3.Row
+        if USE_POSTGRES:
+            # pgbouncer(transaction pooling) 환경에서 서버측 prepared statement 를
+            # 재사용하면 오류가 나므로 비활성화한다.
+            g.db = psycopg.connect(
+                DATABASE_URL, row_factory=dict_row, prepare_threshold=None
+            )
+        else:
+            g.db = sqlite3.connect(DB_PATH)
+            g.db.row_factory = sqlite3.Row
     return g.db
 
 
@@ -43,23 +63,42 @@ def close_db(exc):
 
 
 def init_db():
-    db = sqlite3.connect(DB_PATH)
-    db.executescript(
-        """
-        CREATE TABLE IF NOT EXISTS todos (
-            id         INTEGER PRIMARY KEY AUTOINCREMENT,
-            title      TEXT    NOT NULL,
-            memo       TEXT    NOT NULL DEFAULT '',
-            priority   TEXT    NOT NULL DEFAULT 'normal',
-            due_date   TEXT,
-            done       INTEGER NOT NULL DEFAULT 0,
-            created_at TEXT    NOT NULL,
-            updated_at TEXT    NOT NULL
-        );
-        """
-    )
-    db.commit()
-    db.close()
+    if USE_POSTGRES:
+        conn = psycopg.connect(DATABASE_URL)
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS todos (
+                id         SERIAL  PRIMARY KEY,
+                title      TEXT    NOT NULL,
+                memo       TEXT    NOT NULL DEFAULT '',
+                priority   TEXT    NOT NULL DEFAULT 'normal',
+                due_date   TEXT,
+                done       INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT    NOT NULL,
+                updated_at TEXT    NOT NULL
+            );
+            """
+        )
+        conn.commit()
+        conn.close()
+    else:
+        conn = sqlite3.connect(DB_PATH)
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS todos (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                title      TEXT    NOT NULL,
+                memo       TEXT    NOT NULL DEFAULT '',
+                priority   TEXT    NOT NULL DEFAULT 'normal',
+                due_date   TEXT,
+                done       INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT    NOT NULL,
+                updated_at TEXT    NOT NULL
+            );
+            """
+        )
+        conn.commit()
+        conn.close()
 
 
 def now():
@@ -96,7 +135,7 @@ def index():
     """
 
     db = get_db()
-    todos = db.execute(sql, params).fetchall()
+    todos = db.execute(q(sql), params).fetchall()
     counts = db.execute(
         "SELECT COUNT(*) AS total,"
         " SUM(CASE WHEN done = 1 THEN 1 ELSE 0 END) AS done"
@@ -132,8 +171,10 @@ def add():
 
     db = get_db()
     db.execute(
-        "INSERT INTO todos (title, memo, priority, due_date, done, created_at, updated_at)"
-        " VALUES (?, ?, ?, ?, 0, ?, ?)",
+        q(
+            "INSERT INTO todos (title, memo, priority, due_date, done, created_at, updated_at)"
+            " VALUES (?, ?, ?, ?, 0, ?, ?)"
+        ),
         (title, memo, priority, due_date, now(), now()),
     )
     db.commit()
@@ -144,12 +185,12 @@ def add():
 @app.route("/toggle/<int:todo_id>", methods=["POST"])
 def toggle(todo_id):
     db = get_db()
-    row = db.execute("SELECT done FROM todos WHERE id = ?", (todo_id,)).fetchone()
+    row = db.execute(q("SELECT done FROM todos WHERE id = ?"), (todo_id,)).fetchone()
     if row is None:
         flash("해당 할 일을 찾을 수 없습니다.", "error")
         return redirect(url_for("index"))
     db.execute(
-        "UPDATE todos SET done = ?, updated_at = ? WHERE id = ?",
+        q("UPDATE todos SET done = ?, updated_at = ? WHERE id = ?"),
         (0 if row["done"] else 1, now(), todo_id),
     )
     db.commit()
@@ -160,7 +201,7 @@ def toggle(todo_id):
 @app.route("/edit/<int:todo_id>", methods=["GET", "POST"])
 def edit(todo_id):
     db = get_db()
-    todo = db.execute("SELECT * FROM todos WHERE id = ?", (todo_id,)).fetchone()
+    todo = db.execute(q("SELECT * FROM todos WHERE id = ?"), (todo_id,)).fetchone()
     if todo is None:
         flash("해당 할 일을 찾을 수 없습니다.", "error")
         return redirect(url_for("index"))
@@ -176,8 +217,10 @@ def edit(todo_id):
             priority = "normal"
 
         db.execute(
-            "UPDATE todos SET title = ?, memo = ?, priority = ?, due_date = ?,"
-            " done = ?, updated_at = ? WHERE id = ?",
+            q(
+                "UPDATE todos SET title = ?, memo = ?, priority = ?, due_date = ?,"
+                " done = ?, updated_at = ? WHERE id = ?"
+            ),
             (
                 title,
                 request.form.get("memo", "").strip(),
@@ -198,7 +241,7 @@ def edit(todo_id):
 @app.route("/delete/<int:todo_id>", methods=["POST"])
 def delete(todo_id):
     db = get_db()
-    db.execute("DELETE FROM todos WHERE id = ?", (todo_id,))
+    db.execute(q("DELETE FROM todos WHERE id = ?"), (todo_id,))
     db.commit()
     flash("할 일을 삭제했습니다.", "success")
     return redirect(url_for("index", view=request.form.get("view", "all")))
