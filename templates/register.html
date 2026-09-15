@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}회원가입 · ETNS 할일관리{% endblock %}
+
+{% block content %}
+<section class="card auth-card">
+  <h2>회원가입</h2>
+  <form class="edit-form" method="post">
+    <label>아이디
+      <input type="text" name="username" maxlength="50" autofocus required>
+    </label>
+    <label>비밀번호 (6자 이상)
+      <input type="password" name="password" minlength="6" required>
+    </label>
+    <label>비밀번호 확인
+      <input type="password" name="confirm" minlength="6" required>
+    </label>
+    <div class="row end">
+      <button class="btn" type="submit">가입하기</button>
+    </div>
+  </form>
+  <p class="auth-switch">
+    이미 계정이 있으신가요? <a href="{{ url_for('login') }}">로그인</a>
+  </p>
+</section>
+{% endblock %}

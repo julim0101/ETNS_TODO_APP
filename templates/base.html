@@ -10,6 +10,14 @@
   <div class="wrap">
     <header class="head">
       <h1><a href="{{ url_for('index') }}">ETNS 할일관리</a></h1>
+      {% if current_username %}
+        <div class="user-bar">
+          <span>{{ current_username }} 님</span>
+          <form method="post" action="{{ url_for('logout') }}">
+            <button class="btn ghost" type="submit">로그아웃</button>
+          </form>
+        </div>
+      {% endif %}
     </header>
 
     {% with messages = get_flashed_messages(with_categories=true) %}
