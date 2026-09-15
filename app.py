@@ -3,7 +3,7 @@
 import os
 import sqlite3
 import tempfile
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 from flask import Flask, flash, g, redirect, render_template, request, url_for
 
@@ -15,6 +15,9 @@ ON_SERVERLESS = bool(os.environ.get("VERCEL"))
 DB_PATH = os.environ.get("TODO_DB_PATH") or os.path.join(
     tempfile.gettempdir() if ON_SERVERLESS else BASE_DIR, "todo.db"
 )
+
+# 배포 환경(Vercel)은 UTC 로 동작하므로 표시/비교는 항상 KST 기준으로 한다.
+KST = timezone(timedelta(hours=9))
 
 PRIORITIES = ("high", "normal", "low")
 FILTERS = ("all", "active", "done")
@@ -60,7 +63,11 @@ def init_db():
 
 
 def now():
-    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    return datetime.now(KST).strftime("%Y-%m-%d %H:%M:%S")
+
+
+def today():
+    return datetime.now(KST).strftime("%Y-%m-%d")
 
 
 # --- 화면 -------------------------------------------------------------------
@@ -106,7 +113,7 @@ def index():
         total=total,
         done=done,
         active=total - done,
-        today=datetime.now().strftime("%Y-%m-%d"),
+        today=today(),
     )
 
 
