@@ -4,12 +4,16 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}ETNS 할일관리{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;800&family=Share+Tech+Mono&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
+  <div class="scanlines" aria-hidden="true"></div>
   <div class="wrap">
     <header class="head">
-      <h1><a href="{{ url_for('index') }}">ETNS 할일관리</a></h1>
+      <h1><a href="{{ url_for('index') }}">ETNS<span class="accent">_</span>할일관리</a></h1>
       {% if current_username %}
         <div class="user-bar">
           <span>{{ current_username }} 님</span>
