@@ -2,12 +2,19 @@
 
 import os
 import sqlite3
+import tempfile
 from datetime import datetime
 
 from flask import Flask, flash, g, redirect, render_template, request, url_for
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(BASE_DIR, "todo.db")
+
+# Vercel 등 서버리스 환경은 파일시스템이 읽기 전용이라 /tmp 만 쓸 수 있다.
+# (서버리스에서는 인스턴스가 재활용될 때 데이터가 사라진다. README 참고)
+ON_SERVERLESS = bool(os.environ.get("VERCEL"))
+DB_PATH = os.environ.get("TODO_DB_PATH") or os.path.join(
+    tempfile.gettempdir() if ON_SERVERLESS else BASE_DIR, "todo.db"
+)
 
 PRIORITIES = ("high", "normal", "low")
 FILTERS = ("all", "active", "done")
@@ -199,6 +206,9 @@ def clear_done():
     return redirect(url_for("index"))
 
 
+# 서버리스에서는 __main__ 이 실행되지 않으므로 import 시점에 스키마를 보장한다.
+init_db()
+
+
 if __name__ == "__main__":
-    init_db()
     app.run(host="127.0.0.1", port=5000, debug=True)
