@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}할 일 수정 · ETNS 할일관리{% endblock %}
+
+{% block content %}
+<section class="card">
+  <h2>할 일 수정</h2>
+  <form class="edit-form" method="post">
+    <label>제목
+      <input type="text" name="title" value="{{ todo['title'] }}" maxlength="200" required>
+    </label>
+    <label>메모
+      <textarea name="memo" rows="4">{{ todo['memo'] }}</textarea>
+    </label>
+    <div class="row">
+      <label>우선순위
+        <select name="priority">
+          {% for key, label in [('high', '높음'), ('normal', '보통'), ('low', '낮음')] %}
+            <option value="{{ key }}" {% if todo['priority'] == key %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>마감일
+        <input type="date" name="due_date" value="{{ todo['due_date'] or '' }}">
+      </label>
+      <label class="inline">
+        <input type="checkbox" name="done" {% if todo['done'] %}checked{% endif %}> 완료
+      </label>
+    </div>
+    <div class="row end">
+      <a class="btn ghost" href="{{ url_for('index') }}">취소</a>
+      <button class="btn" type="submit">저장</button>
+    </div>
+  </form>
+</section>
+{% endblock %}

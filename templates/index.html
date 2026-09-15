@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="card">
+  <form class="add-form" method="post" action="{{ url_for('add') }}">
+    <input type="hidden" name="view" value="{{ view }}">
+    <input class="grow" type="text" name="title" placeholder="무엇을 해야 하나요?" maxlength="200" autofocus required>
+    <select name="priority">
+      <option value="high">높음</option>
+      <option value="normal" selected>보통</option>
+      <option value="low">낮음</option>
+    </select>
+    <input type="date" name="due_date" min="2000-01-01">
+    <button type="submit">추가</button>
+    <textarea class="memo-input" name="memo" rows="2" placeholder="메모 (선택)"></textarea>
+  </form>
+</section>
+
+<section class="toolbar">
+  <div class="stats">
+    전체 <strong>{{ total }}</strong> ·
+    진행중 <strong>{{ active }}</strong> ·
+    완료 <strong>{{ done }}</strong>
+  </div>
+
+  <nav class="filters">
+    {% for key, label in [('all', '전체'), ('active', '진행중'), ('done', '완료')] %}
+      <a class="chip {% if view == key %}on{% endif %}"
+         href="{{ url_for('index', view=key, q=keyword) }}">{{ label }}</a>
+    {% endfor %}
+  </nav>
+
+  <form class="search" method="get" action="{{ url_for('index') }}">
+    <input type="hidden" name="view" value="{{ view }}">
+    <input type="search" name="q" value="{{ keyword }}" placeholder="검색">
+    <button type="submit">검색</button>
+  </form>
+</section>
+
+{% if todos %}
+  <ul class="todo-list">
+    {% for todo in todos %}
+      <li class="todo {% if todo['done'] %}is-done{% endif %}">
+        <form class="toggle" method="post" action="{{ url_for('toggle', todo_id=todo['id']) }}">
+          <input type="hidden" name="view" value="{{ view }}">
+          <input type="hidden" name="q" value="{{ keyword }}">
+          <button type="submit" class="check" title="완료 전환">{{ '☑' if todo['done'] else '☐' }}</button>
+        </form>
+
+        <div class="body">
+          <div class="title-row">
+            <span class="title">{{ todo['title'] }}</span>
+            <span class="badge p-{{ todo['priority'] }}">
+              {{ {'high': '높음', 'normal': '보통', 'low': '낮음'}[todo['priority']] }}
+            </span>
+            {% if todo['due_date'] %}
+              <span class="badge due {% if not todo['done'] and todo['due_date'] < today %}over{% endif %}">
+                {{ todo['due_date'] }}
+              </span>
+            {% endif %}
+          </div>
+          {% if todo['memo'] %}<p class="memo">{{ todo['memo'] }}</p>{% endif %}
+          <p class="meta">등록 {{ todo['created_at'] }}</p>
+        </div>
+
+        <div class="actions">
+          <a class="btn ghost" href="{{ url_for('edit', todo_id=todo['id']) }}">수정</a>
+          <form method="post" action="{{ url_for('delete', todo_id=todo['id']) }}"
+                onsubmit="return confirm('삭제할까요?');">
+            <input type="hidden" name="view" value="{{ view }}">
+            <button class="btn danger" type="submit">삭제</button>
+          </form>
+        </div>
+      </li>
+    {% endfor %}
+  </ul>
+
+  {% if done %}
+    <form class="clear" method="post" action="{{ url_for('clear_done') }}"
+          onsubmit="return confirm('완료된 할 일을 모두 삭제할까요?');">
+      <button class="btn ghost" type="submit">완료된 항목 정리 ({{ done }})</button>
+    </form>
+  {% endif %}
+{% else %}
+  <p class="empty">표시할 할 일이 없습니다.</p>
+{% endif %}
+{% endblock %}
